@@ -40,26 +40,46 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.util.Calendar
 
+// Global holder to pass an alarm to the CreateAlarmScreen for editing.
+object AlarmHolder {
+    var alarmToEdit: Alarm? = null
+}
+
+// Data class for Alarm (declared only once)
+data class Alarm(val time: String, val days: List<String>)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreateAlarmScreen(navController: NavHostController) {
-    // Wrap the entire UI in a dark theme
     MaterialTheme(colorScheme = darkColorScheme()) {
-        // Obtain the context once at the beginning of the composable
         val context = LocalContext.current
+        val editingAlarm = AlarmHolder.alarmToEdit
 
-        var selectedTime by remember { mutableStateOf("Select Time") }
+        // Get current time for new alarms; if editing, use the alarm's set time.
+        val currentTime = Calendar.getInstance().let {
+            String.format("%02d:%02d", it.get(Calendar.HOUR_OF_DAY), it.get(Calendar.MINUTE))
+        }
+        var selectedTime by remember { mutableStateOf(editingAlarm?.time ?: currentTime) }
+
         val daysOfWeek = listOf("Su", "M", "Tu", "W", "Th", "F", "S")
-        val selectedDays = remember { mutableStateMapOf<String, Boolean>().apply {
-            daysOfWeek.forEach { this[it] = false }
-        } }
+        val selectedDays = remember {
+            mutableStateMapOf<String, Boolean>().apply {
+                daysOfWeek.forEach { day ->
+                    this[day] = editingAlarm?.days?.contains(day) ?: false
+                }
+            }
+        }
 
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("Set Alarm") },
+                    title = { Text(if (editingAlarm != null) "Edit Alarm" else "Set Alarm") },
                     navigationIcon = {
-                        IconButton(onClick = { navController.popBackStack() }) {
+                        IconButton(onClick = {
+                            // Clear edit state when canceling.
+                            AlarmHolder.alarmToEdit = null
+                            navController.popBackStack()
+                        }) {
                             Icon(
                                 imageVector = Icons.Filled.ArrowBack,
                                 contentDescription = "Back"
@@ -76,14 +96,12 @@ fun CreateAlarmScreen(navController: NavHostController) {
                     .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Time Picker Button using the stored context variable
+                // Time Picker Button – shows the alarm's set time if editing.
                 Button(onClick = { selectTime(context) { time -> selectedTime = time } }) {
                     Text(text = selectedTime)
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
-
-                // Days Selection (Two Rows)
                 Text("Repeat on:")
 
                 // First Row (Mon-Fri)
@@ -96,7 +114,7 @@ fun CreateAlarmScreen(navController: NavHostController) {
                     }
                 }
 
-                // Second Row (Sat, Sun)
+                // Second Row (Sat, Su)
                 Row(
                     horizontalArrangement = Arrangement.Center,
                     modifier = Modifier.fillMaxWidth()
@@ -108,11 +126,15 @@ fun CreateAlarmScreen(navController: NavHostController) {
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Save Alarm Button using the stored context variable
                 Button(onClick = {
                     val selectedDaysList = selectedDays.filter { it.value }.keys.toList()
-                    saveAlarm(context, selectedTime, selectedDaysList)
-                    navController.popBackStack() // Return to MainScreen after saving
+                    if (editingAlarm != null) {
+                        updateAlarm(context, editingAlarm, selectedTime, selectedDaysList)
+                        AlarmHolder.alarmToEdit = null
+                    } else {
+                        saveAlarm(context, selectedTime, selectedDaysList)
+                    }
+                    navController.popBackStack() // Return to MainScreen after saving.
                 }) {
                     Text("Save Alarm")
                 }
@@ -138,7 +160,6 @@ fun selectTime(context: Context, onTimeSelected: (String) -> Unit) {
     val calendar = Calendar.getInstance()
     val hour = calendar.get(Calendar.HOUR_OF_DAY)
     val minute = calendar.get(Calendar.MINUTE)
-
     TimePickerDialog(context, { _: TimePicker, selectedHour: Int, selectedMinute: Int ->
         val formattedTime = String.format("%02d:%02d", selectedHour, selectedMinute)
         onTimeSelected(formattedTime)
@@ -149,22 +170,27 @@ fun saveAlarm(context: Context, time: String, days: List<String>) {
     val sharedPreferences: SharedPreferences =
         context.getSharedPreferences("alarms", Context.MODE_PRIVATE)
     val editor = sharedPreferences.edit()
-
-    // Load existing alarms using Gson
     val gson = Gson()
     val type = object : TypeToken<MutableList<Alarm>>() {}.type
     val alarms: MutableList<Alarm> =
         gson.fromJson(sharedPreferences.getString("alarms", "[]"), type) ?: mutableListOf()
-
-    // Add new alarm to the list
     alarms.add(Alarm(time, days))
-
-    // Save the updated list back to SharedPreferences
     editor.putString("alarms", gson.toJson(alarms))
     editor.apply()
 }
 
-// Alarm data class (declared only once)
-data class Alarm(val time: String, val days: List<String>)
-
+fun updateAlarm(context: Context, oldAlarm: Alarm, newTime: String, newDays: List<String>) {
+    val sharedPreferences: SharedPreferences =
+        context.getSharedPreferences("alarms", Context.MODE_PRIVATE)
+    val gson = Gson()
+    val type = object : TypeToken<MutableList<Alarm>>() {}.type
+    val alarms: MutableList<Alarm> =
+        gson.fromJson(sharedPreferences.getString("alarms", "[]"), type) ?: mutableListOf()
+    alarms.removeAll { it == oldAlarm }
+    alarms.add(Alarm(newTime, newDays))
+    sharedPreferences.edit().apply {
+        putString("alarms", gson.toJson(alarms))
+        apply()
+    }
+}
 
