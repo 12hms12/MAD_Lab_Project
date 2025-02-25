@@ -61,10 +61,16 @@ fun CreateAlarmScreen(navController: NavHostController) {
         }
         var selectedTime by remember { mutableStateOf(editingAlarm?.time ?: currentTime) }
 
-        val daysOfWeek = listOf("Su", "M", "Tu", "W", "Th", "F", "S")
+        // Define days in two groups:
+        // Weekdays: Monday to Friday, Weekend: Saturday and Sunday.
+        val weekdays = listOf("M", "Tu", "W", "Th", "F")
+        val weekend = listOf("Sa", "Su")
+        val allDays = weekdays + weekend  // This list defines the desired order.
+
         val selectedDays = remember {
             mutableStateMapOf<String, Boolean>().apply {
-                daysOfWeek.forEach { day ->
+                allDays.forEach { day ->
+                    // If editing, check if the alarm's days contain the day; otherwise default to false.
                     this[day] = editingAlarm?.days?.contains(day) ?: false
                 }
             }
@@ -104,22 +110,22 @@ fun CreateAlarmScreen(navController: NavHostController) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("Repeat on:")
 
-                // First Row (Mon-Fri)
+                // First row: Weekdays (Mon-Fri)
                 Row(
                     horizontalArrangement = Arrangement.Center,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    listOf("M", "Tu", "W", "Th", "F").forEach { day ->
+                    weekdays.forEach { day ->
                         DayToggle(day, selectedDays)
                     }
                 }
 
-                // Second Row (Sat, Su)
+                // Second row: Weekend (Sa, Su)
                 Row(
                     horizontalArrangement = Arrangement.Center,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    listOf("S", "Su").forEach { day ->
+                    weekend.forEach { day ->
                         DayToggle(day, selectedDays)
                     }
                 }
@@ -127,7 +133,8 @@ fun CreateAlarmScreen(navController: NavHostController) {
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Button(onClick = {
-                    val selectedDaysList = selectedDays.filter { it.value }.keys.toList()
+                    // Always return the selected days in the desired order.
+                    val selectedDaysList = allDays.filter { selectedDays[it] == true }
                     if (editingAlarm != null) {
                         updateAlarm(context, editingAlarm, selectedTime, selectedDaysList)
                         AlarmHolder.alarmToEdit = null
@@ -193,4 +200,6 @@ fun updateAlarm(context: Context, oldAlarm: Alarm, newTime: String, newDays: Lis
         apply()
     }
 }
+
+
 
